@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<conqat-architecture xmlns="http://conqat.cs.tum.edu/ns/architecture" policy="deny">
+   <component dim="120,40" name="apache-derby" pos="10,80">
+      <code-mapping regex="org\.apache\.derby\..*" type="include"/>
+   </component>
+   <component dim="120,40" name="util-libraries" pos="720,240">
+      <code-mapping regex="org\.apache\.commons\..*" type="include"/>
+      <code-mapping regex="org\.databene\.commons\..*" type="include"/>
+      <code-mapping regex="org\.joda\.time\..*" type="include"/>
+   </component>
+   <component dim="120,40" name="plexus" pos="719,175">
+      <code-mapping regex="org\.codehaus\.plexus\..*" type="include"/>
+   </component>
+   <component dim="141,40" name="cloud-manager-api" pos="710,110">
+      <code-mapping regex="org\.aludratest\.cloud\..*" type="include"/>
+      <code-mapping regex="org\.aludratest\.cloud\.impl\..*" type="exclude"/>
+   </component>
+   <component dim="120,40" name="impl-constants" pos="715,43">
+      <code-mapping regex="org\.aludratest\.cloud\.impl\.ImplConstants" type="include"/>
+   </component>
+   <component dim="481,271" name="cloud-manager-impl" pos="180,30">
+      <component dim="120,40" name="cloud-manager-impl/user" pos="30,200">
+         <code-mapping regex="org\.aludratest\.cloud\.impl\.user\..*" type="include"/>
+      </component>
+      <component dim="120,40" name="cloud-manager-impl/rest" pos="180,130">
+         <code-mapping regex="org\.aludratest\.cloud\.impl\.rest\..*" type="include"/>
+      </component>
+      <component dim="120,40" name="cloud-manager-impl/resourcegroup" pos="330,200">
+         <code-mapping regex="org\.aludratest\.cloud\.impl\.resourcegroup\..*" type="include"/>
+      </component>
+      <component dim="120,40" name="cloud-manager-impl/request" pos="30,130">
+         <code-mapping regex="org\.aludratest\.cloud\.impl\.request\..*" type="include"/>
+      </component>
+      <component dim="120,40" name="cloud-manager-impl/manager" pos="330,130">
+         <code-mapping regex="org\.aludratest\.cloud\.impl\.manager\..*" type="include"/>
+      </component>
+      <component dim="120,40" name="cloud-manager-impl/config" pos="180,50">
+         <code-mapping regex="org\.aludratest\.cloud\.impl\.config\..*" type="include"/>
+      </component>
+      <component dim="120,40" name="cloud-manager-impl/auth" pos="330,50">
+         <code-mapping regex="org\.aludratest\.cloud\.impl\.auth\..*" type="include"/>
+      </component>
+      <component dim="120,40" name="cloud-manager-impl/app" pos="30,50">
+         <code-mapping regex="org\.aludratest\.cloud\.impl\.app\..*" type="include"/>
+      </component>
+   </component>
+   <component dim="120,40" name="slf4j" pos="550,340">
+      <code-mapping regex="org\.slf4j\..*" type="include"/>
+   </component>
+   <component dim="120,40" name="json" pos="370,340">
+      <code-mapping regex="org\.json\..*" type="include"/>
+   </component>
+   <component dim="120,40" name="sys_java" pos="170,340">
+      <code-mapping regex="java\..*|javax\..*" type="include"/>
+   </component>
+   <allow source="cloud-manager-impl" target="sys_java"/>
+   <allow source="cloud-manager-impl" target="slf4j"/>
+   <allow source="cloud-manager-impl" target="impl-constants"/>
+   <allow source="cloud-manager-impl" target="cloud-manager-api"/>
+   <allow source="cloud-manager-impl" target="json"/>
+   <allow source="cloud-manager-impl/request" target="cloud-manager-impl/app"/>
+   <allow source="cloud-manager-impl/request" target="cloud-manager-impl/user"/>
+   <allow source="cloud-manager-impl/app" target="cloud-manager-impl/config"/>
+   <allow source="cloud-manager-impl/rest" target="cloud-manager-impl/app"/>
+   <allow source="cloud-manager-impl" target="plexus"/>
+   <allow source="cloud-manager-impl" target="util-libraries"/>
+   <allow source="cloud-manager-impl/app" target="apache-derby"/>
+</conqat-architecture>

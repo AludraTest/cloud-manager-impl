@@ -1,0 +1,127 @@
+package org.aludratest.cloud.impl.auth;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+
+import org.aludratest.cloud.impl.ImplConstants;
+import org.aludratest.cloud.resource.ResourceType;
+import org.aludratest.cloud.resource.user.ResourceTypeAuthorizationConfig;
+import org.aludratest.cloud.resource.user.ResourceTypeAuthorizationStore;
+import org.aludratest.cloud.user.StoreException;
+import org.aludratest.cloud.user.admin.UserDatabaseRegistry;
+import org.apache.commons.io.IOUtils;
+import org.codehaus.plexus.component.annotations.Component;
+import org.codehaus.plexus.component.annotations.Configuration;
+import org.codehaus.plexus.component.annotations.Requirement;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+/**
+ * Implementation of an Authorization Store which is based on a JSON file. By default, this file is located in the user's home
+ * directory (<code>~/.atcloudmanager/resourceAuth.json</code>). You can change the location using {@link #setStoreFile(String)}.
+ * 
+ * @author falbrech
+ * 
+ */
+@Component(role = ResourceTypeAuthorizationStore.class)
+public class LocalResourceTypeAuthorizationStore implements ResourceTypeAuthorizationStore {
+	
+	@Requirement
+	private UserDatabaseRegistry userDatabaseRegistry;
+
+	@Configuration(value = "~/" + ImplConstants.CONFIG_DIR_NAME + "/resourceAuth.json")
+	private String storeFile;
+
+	@Override
+	public ResourceTypeAuthorizationConfig loadResourceTypeAuthorizations(ResourceType resourceType)
+			throws StoreException {
+		try {
+			return new JSONResourceTypeAuthorizationConfig(load().getJSONArray(resourceType.getName()), userDatabaseRegistry);
+		}
+		catch (JSONException e) {
+			// no such element in map
+			return null;
+		}
+	}
+
+	@Override
+	public void saveResourceTypeAuthorizations(ResourceType resourceType, ResourceTypeAuthorizationConfig authorizations)
+			throws StoreException {
+		FileOutputStream fos = null;
+
+		try {
+			JSONObject obj = load();
+
+			// optimization
+			if (authorizations instanceof JSONResourceTypeAuthorizationConfig) {
+				obj.put(resourceType.getName(), ((JSONResourceTypeAuthorizationConfig) authorizations).getJsonArray());
+			}
+			else {
+				obj.put(resourceType.getName(), JSONResourceTypeAuthorizationConfig.toJSONArray(authorizations));
+			}
+
+			fos = new FileOutputStream(getFile());
+			fos.write(obj.toString().getBytes("UTF-8"));
+		}
+		catch (IOException e) {
+			throw new StoreException("Could not write resource authorization file", e);
+		}
+		catch (JSONException e) {
+			throw new StoreException("Could not create JSON for resource authorization file", e);
+		}
+		finally {
+			IOUtils.closeQuietly(fos);
+		}
+	}
+
+	private JSONObject load() throws StoreException {
+		if (!getFile().exists()) {
+			return new JSONObject();
+		}
+		FileInputStream fis = null;
+		try {
+			fis = new FileInputStream(getFile());
+			return new JSONObject(IOUtils.toString(fis, "UTF-8"));
+		}
+		catch (IOException e) {
+			throw new StoreException("Could not load resource type authorization file", e);
+		}
+		catch (JSONException e) {
+			throw new StoreException("Resource type authorization file has invalid contents", e);
+		}
+		finally {
+			IOUtils.closeQuietly(fis);
+		}
+
+	}
+	
+	private synchronized File getFile() {
+		if (storeFile.startsWith("~")) {
+			return new File(System.getProperty("user.home") + storeFile.substring(1));
+		}
+
+		return new File(storeFile);
+	}
+
+	/**
+	 * Sets the file name to use to write the authorization to and read it from.
+	 * 
+	 * @param storeFile
+	 *            Store file. Must be a valid file path.
+	 */
+	public synchronized void setStoreFile(String storeFile) {
+		this.storeFile = storeFile;
+	}
+
+	/**
+	 * Returns the location of the file which is used to store the authorization configuration.
+	 * 
+	 * @return The location of the file which is used to store the authorization configuration.
+	 */
+	public synchronized String getStoreFile() {
+		return storeFile;
+	}
+
+}
