@@ -42,6 +42,7 @@ import org.aludratest.cloud.resource.ResourceStateHolder;
 import org.aludratest.cloud.resource.ResourceType;
 import org.aludratest.cloud.resource.user.ResourceTypeAuthorization;
 import org.aludratest.cloud.resource.user.ResourceTypeAuthorizationConfig;
+import org.aludratest.cloud.resourcegroup.AuthorizingResourceGroup;
 import org.aludratest.cloud.resourcegroup.ResourceGroup;
 import org.aludratest.cloud.resourcegroup.ResourceGroupManager;
 import org.aludratest.cloud.resourcegroup.ResourceGroupManagerListener;
@@ -372,23 +373,32 @@ public class DefaultResourceManagerImpl implements ResourceManager, ResourceColl
 				return;
 			}
 
-			// check if there are ANY resource groups for this type
+			// check if there are ANY resource groups for this type, where the user has access
+			User user = request.getRequest().getRequestingUser();
 			boolean groupFound = false;
 			for (int groupId : groupManager.getAllResourceGroupIds()) {
 				ResourceGroup group = groupManager.getResourceGroup(groupId);
 				if (resourceType.equals(group.getResourceType()) && group.getResourceCollection().getResourceCount() > 0) {
-					groupFound = true;
-					break;
+					if (group instanceof AuthorizingResourceGroup) {
+						AuthorizingResourceGroup authGroup = (AuthorizingResourceGroup) group;
+						if (!authGroup.isLimitingUsers() || authGroup.isUserAuthorized(user)) {
+							groupFound = true;
+							break;
+						}
+					}
+					else {
+						groupFound = true;
+						break;
+					}
 				}
 			}
 
 			if (!groupFound) {
-				fireError(request, "No resources of type " + resourceType + " available in this manager.");
+				fireError(request, "No resources of type " + resourceType + " for requesting user available in this manager.");
 				return;
 			}
 
 			// check that user has access, and not yet exceeded max resource count
-			User user = request.getRequest().getRequestingUser();
 			ResourceTypeAuthorizationConfig authStore;
 			try {
 				authStore = CloudManagerApp.getInstance().getResourceTypeAuthorizationStore()
