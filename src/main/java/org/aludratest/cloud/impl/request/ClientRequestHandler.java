@@ -309,7 +309,7 @@ public class ClientRequestHandler implements ResourceManagerListener {
 		}
 		catch (ExecutionException e) {
 			LOG.error("Execution exception when waiting for resource", e);
-			return createErrorObject("Execution error");
+			return createErrorObject(e.getMessage());
 		}
 		catch (InterruptedException e) {
 			return createErrorObject("AludraTest Cloud Manager server is shutting down");
