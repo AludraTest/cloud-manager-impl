@@ -29,7 +29,7 @@ import java.util.concurrent.TimeoutException;
 
 import org.aludratest.cloud.app.CloudManagerApp;
 import org.aludratest.cloud.impl.app.CloudManagerApplicationHolder;
-import org.aludratest.cloud.impl.app.LogDb;
+import org.aludratest.cloud.impl.app.DatabaseRequestLogger;
 import org.aludratest.cloud.manager.ManagedResourceQuery;
 import org.aludratest.cloud.manager.ResourceManager;
 import org.aludratest.cloud.manager.ResourceManagerListener;
@@ -185,8 +185,8 @@ public class ClientRequestHandler implements ResourceManagerListener {
 			ClientRequestImpl request = new ClientRequestImpl(requestId, user, module.getResourceType(), object.optInt(
 					"niceLevel", 0), name, attributes);
 			
-			final LogDb database = CloudManagerApplicationHolder.getInstance().getDatabase();
-			final long dbRequestId = database.createRequestLog(user, name);
+			final DatabaseRequestLogger requestLogger = CloudManagerApplicationHolder.getInstance().getRequestLogger();
+			final long dbRequestId = requestLogger.createRequestLog(user, name);
 
 			WaitingRequest wr = new WaitingRequest();
 			wr.future = new WaitForResource();
@@ -381,14 +381,14 @@ public class ClientRequestHandler implements ResourceManagerListener {
 
 	private void startWorking(Resource resource, User user, String jobName, final long dbRequestId)
 			throws SQLException {
-		final LogDb database = CloudManagerApplicationHolder.getInstance().getDatabase();
+		final DatabaseRequestLogger requestLogger = CloudManagerApplicationHolder.getInstance().getRequestLogger();
 
 		// start using resource, if it does not auto-detect this
 		if (resource instanceof UsableResource) {
 			((UsableResource) resource).startUsing();
 		}
 
-		database.updateRequestLogWorkStarted(dbRequestId, resource.getResourceType().getName(), resource.toString());
+		requestLogger.updateRequestLogWorkStarted(dbRequestId, resource.getResourceType().getName(), resource.toString());
 
 		resource.addResourceListener(new ResourceListener() {
 			@Override
@@ -405,21 +405,15 @@ public class ClientRequestHandler implements ResourceManagerListener {
 							break;
 					}
 
-					try {
-						// count active resources
-						int cnt = 0;
-						for (ManagedResourceQuery query : manager.getAllRunningQueries()) {
-							if (query.getRequest().getResourceType().equals(resource.getResourceType())) {
-								cnt++;
-							}
-							
+					// count active resources
+					int cnt = 0;
+					for (ManagedResourceQuery query : manager.getAllRunningQueries()) {
+						if (query.getRequest().getResourceType().equals(resource.getResourceType())) {
+							cnt++;
 						}
 
-						database.updateRequestLogWorkDone(dbRequestId, reason, cnt);
 					}
-					catch (SQLException e) {
-						LOG.error("Could not update database request", e);
-					}
+					requestLogger.updateRequestLogWorkDone(dbRequestId, reason, cnt);
 					resource.removeResourceListener(this);
 				}
 			}

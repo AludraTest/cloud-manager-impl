@@ -15,6 +15,7 @@
  */
 package org.aludratest.cloud.impl.manager;
 
+import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -25,8 +26,15 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import javax.management.JMException;
+import javax.management.MBeanServer;
+import javax.management.ObjectInstance;
+import javax.management.ObjectName;
 
 import org.aludratest.cloud.app.CloudManagerApp;
 import org.aludratest.cloud.manager.ManagedResourceQuery;
@@ -71,7 +79,7 @@ import org.slf4j.LoggerFactory;
  */
 @Component(role = ResourceManager.class)
 public class DefaultResourceManagerImpl implements ResourceManager, ResourceCollectionListener, ResourceGroupManagerListener,
-		ResourceListener {
+		ResourceListener, DefaultResourceManagerImplMBean {
 	
 	private static final Logger LOGGER = LoggerFactory.getLogger(DefaultResourceManagerImpl.class);
 
@@ -88,6 +96,11 @@ public class DefaultResourceManagerImpl implements ResourceManager, ResourceColl
 	private ExecutorService queueWorkerService;
 
 	private RequestQueueWorker queueWorker;
+
+	// MBean infrastructure
+	private AtomicInteger nextResourceId = new AtomicInteger();
+
+	private Map<Resource, Integer> resourceIds = new ConcurrentHashMap<Resource, Integer>();
 
 	@Override
 	public void start(ResourceGroupManager resourceGroupManager) {
@@ -169,6 +182,22 @@ public class DefaultResourceManagerImpl implements ResourceManager, ResourceColl
 		}
 	}
 
+	private void registerResourceMBean(Resource resource) {
+		MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
+		try {
+			int id = nextResourceId.incrementAndGet();
+
+			ObjectName name = new ObjectName("org.aludratest.cloud:00=resources,01=" + resource.getResourceType().getName()
+					+ ",name=" + id);
+			ResourceInfo info = ResourceInfo.create(resource);
+			mbs.registerMBean(info, name);
+			resourceIds.put(resource, Integer.valueOf(id));
+		}
+		catch (JMException e) {
+			LOGGER.warn("Could not register resource in MBean server", e);
+		}
+	}
+
 	private synchronized void putIntoIdle(Resource resource) {
 		Set<Resource> idles = idleResources.get(resource.getResourceType());
 		if (idles == null) {
@@ -196,6 +225,22 @@ public class DefaultResourceManagerImpl implements ResourceManager, ResourceColl
 	@Override
 	public void resourceRemoved(Resource resource) {
 		resource.removeResourceListener(this);
+
+		Integer id = resourceIds.remove(resource);
+		if (id != null) {
+			// find and remove registration in MBean server
+			MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
+			try {
+				Set<ObjectInstance> instances = mbs.queryMBeans(new ObjectName("org.aludratest.cloud:00=resources,01="
+						+ resource.getResourceType().getName() + ",name=" + id), null);
+				if (!instances.isEmpty()) {
+					mbs.unregisterMBean(instances.iterator().next().getObjectName());
+				}
+			}
+			catch (JMException e) {
+				LOGGER.warn("Could not unregister resource from MBean server", e);
+			}
+		}
 	}
 	
 	@Override
@@ -207,6 +252,7 @@ public class DefaultResourceManagerImpl implements ResourceManager, ResourceColl
 			if (rsh.getState() == ResourceState.READY) {
 				resourceAdded(res);
 			}
+			registerResourceMBean(res);
 		}
 	}
 
@@ -214,7 +260,7 @@ public class DefaultResourceManagerImpl implements ResourceManager, ResourceColl
 	public void resourceGroupRemoved(ResourceGroup group) {
 		group.getResourceCollection().removeResourceCollectionListener(this);
 		for (ResourceStateHolder rsh : group.getResourceCollection()) {
-			((Resource) rsh).removeResourceListener(this);
+			resourceRemoved((Resource) rsh);
 		}
 	}
 
@@ -315,6 +361,23 @@ public class DefaultResourceManagerImpl implements ResourceManager, ResourceColl
 			request.resourceReleasedTime = DateTime.now();
 			fireResourceReleased(request, resource);
 		}
+	}
+
+	/* MBean methods */
+	@Override
+	public int getIdleResourceCount() {
+		int result = 0;
+		synchronized (this) {
+			for (Set<Resource> rs : idleResources.values()) {
+				result += rs.size();
+			}
+		}
+		return result;
+	}
+
+	@Override
+	public int getRunningQueriesCount() {
+		return getAllRunningQueries().size();
 	}
 
 	private class RequestQueueWorker implements Runnable {

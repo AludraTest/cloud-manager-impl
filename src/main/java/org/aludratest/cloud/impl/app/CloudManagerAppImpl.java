@@ -15,11 +15,16 @@
  */
 package org.aludratest.cloud.impl.app;
 
+import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import javax.management.JMException;
+import javax.management.MBeanServer;
+import javax.management.ObjectName;
 
 import org.aludratest.cloud.app.CloudManagerApp;
 import org.aludratest.cloud.app.CloudManagerAppConfig;
@@ -155,10 +160,33 @@ public final class CloudManagerAppImpl extends CloudManagerApp {
 			plugin.applicationStarted();
 		}
 
+		// register our MBeans
+		MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
+		try {
+			ObjectName name = new ObjectName("org.aludratest.cloud:type=ResourceGroupManager");
+			mbs.registerMBean(resourceGroupManager, name);
+			name = new ObjectName("org.aludratest.cloud:type=ResourceManager");
+			mbs.registerMBean(resourceManager, name);
+			// name = new ObjectName("org.aludratest.cloud:type=ConfigManager");
+			// mbs.registerMBean(configManager, name);
+		}
+		catch (JMException e) {
+			LOGGER.warn("Could not register beans in JMX", e);
+		}
 	}
 
 	@Override
 	public void shutdown() {
+		MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
+		try {
+			mbs.unregisterMBean(new ObjectName("org.aludratest.cloud:type=ResourceGroupManager"));
+			mbs.unregisterMBean(new ObjectName("org.aludratest.cloud:type=ResourceManager"));
+			// mbs.unregisterMBean(new ObjectName("org.aludratest.cloud:type=ConfigManager"));
+		}
+		catch (JMException e) {
+			LOGGER.warn("Could not register beans in JMX", e);
+		}
+
 		resourceManager.shutdown();
 
 		for (ResourceModule module : resourceModules.values()) {

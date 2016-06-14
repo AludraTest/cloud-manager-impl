@@ -20,11 +20,15 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.StringWriter;
+import java.lang.management.ManagementFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import javax.management.JMException;
+import javax.management.MBeanServer;
+import javax.management.ObjectName;
 import javax.servlet.ServletConfig;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
@@ -89,6 +93,14 @@ public class ClientRequestServlet extends HttpServlet {
 		super.init(config);
 
 		requestHandler = new ClientRequestHandler(CloudManagerApp.getInstance().getResourceManager());
+		// register request handler as MBean
+		MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
+		try {
+			mbs.registerMBean(requestHandler, new ObjectName("org.aludratest.cloud:type=ClientRequestHandler"));
+		}
+		catch (JMException e) {
+			LOG.error("Could not register request handler in MBean Server", e);
+		}
 	}
 
 	// for debugging purposes

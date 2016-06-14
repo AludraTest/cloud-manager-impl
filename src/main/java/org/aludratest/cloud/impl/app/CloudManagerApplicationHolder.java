@@ -65,7 +65,11 @@ public class CloudManagerApplicationHolder implements PreferencesListener {
 
 	private File configFile;
 
-	private LogDb database;
+	private LogDatabase logDatabase;
+
+	private DatabaseRequestLogger requestLogger;
+
+	private Thread requestLoggerThread;
 
 	private ScheduledExecutorService saveScheduler;
 
@@ -116,7 +120,10 @@ public class CloudManagerApplicationHolder implements PreferencesListener {
 		attachPreferencesListener(rootPreferences);
 
 		try {
-			database = new LogDb();
+			logDatabase = new LogDatabase();
+			requestLogger = new DatabaseRequestLogger(logDatabase);
+			requestLoggerThread = new Thread(requestLogger);
+			requestLoggerThread.start();
 		}
 		catch (Exception e) {
 			throw new ConfigException("Could not initialize internal Derby Database", e);
@@ -145,7 +152,15 @@ public class CloudManagerApplicationHolder implements PreferencesListener {
 		application.shutdown();
 		saveScheduler.shutdown();
 		plexus.dispose();
-		database.shutdown();
+
+		requestLoggerThread.interrupt();
+		try {
+			requestLoggerThread.join(10000);
+		}
+		catch (InterruptedException e) {
+			// ignore
+		}
+		logDatabase.shutdown();
 	}
 
 	/**
@@ -167,13 +182,17 @@ public class CloudManagerApplicationHolder implements PreferencesListener {
 		return rootPreferences;
 	}
 
+	public LogDatabase getDatabase() {
+		return logDatabase;
+	}
+
 	/**
-	 * Returns the internal logging database for logging resource requests.
+	 * Returns the internal logger for logging resource requests.
 	 * 
-	 * @return The internal logging database for logging resource requests.
+	 * @return The internal logger for logging resource requests.
 	 */
-	public LogDb getDatabase() {
-		return database;
+	public DatabaseRequestLogger getRequestLogger() {
+		return requestLogger;
 	}
 
 	private MutablePreferences readConfig() {

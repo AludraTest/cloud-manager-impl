@@ -21,6 +21,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -37,6 +38,8 @@ import org.aludratest.cloud.config.SimplePreferences;
 import org.aludratest.cloud.config.admin.AbstractConfigurationAdmin;
 import org.aludratest.cloud.config.admin.ConfigurationAdmin;
 import org.aludratest.cloud.module.ResourceModule;
+import org.aludratest.cloud.resource.Resource;
+import org.aludratest.cloud.resource.ResourceStateHolder;
 import org.aludratest.cloud.resource.ResourceType;
 import org.aludratest.cloud.resourcegroup.ResourceGroup;
 import org.aludratest.cloud.resourcegroup.ResourceGroupManager;
@@ -57,7 +60,7 @@ import org.slf4j.LoggerFactory;
  * 
  */
 @Component(role = ResourceGroupManager.class, hint = "default")
-public class ResourceGroupManagerImpl implements ResourceGroupManager, Configurable {
+public class ResourceGroupManagerImpl implements ResourceGroupManager, Configurable, ResourceGroupManagerImplMBean {
 
 	private static final String METADATA_PREFS_NODE = "groupMetadata";
 
@@ -420,6 +423,26 @@ public class ResourceGroupManagerImpl implements ResourceGroupManager, Configura
 						id,
 						new ResourceGroupMetadata(prefs.getStringValue(METADATA_NAME_PREF_KEY), prefs
 								.getIntValue(METADATA_RANK_PREF_KEY), module.getResourceType(), natures));
+			}
+		}
+
+		return result;
+	}
+
+	/* MBean methods */
+	@Override
+	public List<Resource> getResourcesOfGroup(int groupId) {
+		ResourceGroup group = getResourceGroup(groupId);
+		if (group == null) {
+			return null;
+		}
+
+		List<Resource> result = new ArrayList<Resource>();
+		Iterator<? extends ResourceStateHolder> iter = group.getResourceCollection().iterator();
+		while (iter.hasNext()) {
+			ResourceStateHolder rsh = iter.next();
+			if (rsh instanceof Resource) {
+				result.add((Resource) rsh);
 			}
 		}
 

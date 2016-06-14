@@ -84,4 +84,13 @@ public class GateKeeper {
 		}
 	}
 
+	/**
+	 * Returns the number of Threads currently waiting at this GateKeeper.
+	 * 
+	 * @return The number of Threads currently wa
+	 */
+	public int getWaitingThreads() {
+		return waitingThreads.get();
+	}
+
 }
