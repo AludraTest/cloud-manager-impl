@@ -2,7 +2,7 @@
 Engine implementation of AludraTest Cloud Manager
 
 ## Build Status
-[![Build Status](https://travis-ci.org/AludraTest/cloud-manager-api.svg?branch=master)](https://travis-ci.org/AludraTest/cloud-manager-api)
+[![Build Status](https://travis-ci.org/AludraTest/cloud-manager-impl.svg?branch=master)](https://travis-ci.org/AludraTest/cloud-manager-impl)
 
 ## Description
 
