@@ -44,6 +44,7 @@ public class CloudManagerRestApplication extends Application {
 		RestConnectorRegistry registry = getRestConnectorRegistry();
 		if (registry != null) {
 			for (RestConnector rc : registry.getRestConnectors().values()) {
+				LOG.debug("Registering REST endpoint class " + rc.getClass().getName());
 				result.add(rc.getClass());
 			}
 		}

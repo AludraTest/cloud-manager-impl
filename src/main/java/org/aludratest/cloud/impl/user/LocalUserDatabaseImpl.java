@@ -28,7 +28,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-import org.aludratest.cloud.impl.ImplConstants;
+import org.aludratest.cloud.impl.app.CloudManagerApplicationHolder;
 import org.aludratest.cloud.user.StoreException;
 import org.aludratest.cloud.user.User;
 import org.aludratest.cloud.user.UserDatabase;
@@ -54,7 +54,7 @@ public class LocalUserDatabaseImpl implements UserDatabase {
 	 */
 	public static final String HINT = "local-file";
 	
-	private static final String DB_FILE = ImplConstants.CONFIG_DIR_NAME + "/users.json";
+	private static final String DB_FILE = "users.json";
 
 	@Override
 	public String getSource() {
@@ -258,8 +258,7 @@ public class LocalUserDatabaseImpl implements UserDatabase {
 	 *             If contents could not be stored.
 	 */
 	protected JSONObject load() throws StoreException {
-		File home = new File(System.getProperty("user.home"));
-		File dbFile = new File(home, DB_FILE);
+		File dbFile = new File(CloudManagerApplicationHolder.getInstance().getConfigurationDirectory(), DB_FILE);
 
 		if (!dbFile.isFile()) {
 			JSONObject empty = new JSONObject();
@@ -298,12 +297,10 @@ public class LocalUserDatabaseImpl implements UserDatabase {
 	 *             If contents could not be stored.
 	 */
 	protected void save(JSONObject contents) throws StoreException {
-		File home = new File(System.getProperty("user.home"));
-		File dbFile = new File(home, DB_FILE);
+		File dbFile = new File(CloudManagerApplicationHolder.getInstance().getConfigurationDirectory(), DB_FILE);
 
 		FileOutputStream fos = null;
 		try {
-			dbFile.getParentFile().mkdirs();
 			fos = new FileOutputStream(dbFile);
 			fos.write(contents.toString().getBytes("UTF-8"));
 		}

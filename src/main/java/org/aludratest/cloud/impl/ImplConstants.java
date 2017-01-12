@@ -24,7 +24,7 @@ package org.aludratest.cloud.impl;
 public interface ImplConstants {
 
 	/**
-	 * Name of the configuration directory within the user's home directory.
+	 * Name of the (default) configuration directory within the user's home directory.
 	 */
 	public static final String CONFIG_DIR_NAME = ".atcloudmanager";
 

@@ -119,8 +119,23 @@ public class CloudManagerApplicationHolder implements PreferencesListener {
 		((MainPreferencesImpl) rootPreferences).applyPreferences(readConfig());
 		attachPreferencesListener(rootPreferences);
 
+		String sDbPort = System.getProperty("derby.port", "1527");
+		Integer dbPort = null;
+		if (sDbPort != null) {
+			try {
+				dbPort = Integer.valueOf(sDbPort);
+			}
+			catch (NumberFormatException e) {
+				throw new ConfigException("Invalid DB port number: " + sDbPort);
+			}
+			LOG.info("Starting up Derby network server on TCP port " + dbPort);
+		}
+		else {
+			LOG.info("No Derby Port specified, not starting up Derby Network Server");
+		}
+
 		try {
-			logDatabase = new LogDatabase();
+			logDatabase = new LogDatabase(configFile.getParentFile(), dbPort);
 			requestLogger = new DatabaseRequestLogger(logDatabase);
 			requestLoggerThread = new Thread(requestLogger);
 			requestLoggerThread.start();
@@ -182,8 +197,28 @@ public class CloudManagerApplicationHolder implements PreferencesListener {
 		return rootPreferences;
 	}
 
+	/**
+	 * Returns the database for logging resource access.
+	 * 
+	 * @return The database for logging resource access.
+	 */
 	public LogDatabase getDatabase() {
 		return logDatabase;
+	}
+
+	/**
+	 * Returns the directory which is used as the configuration directory for the application. Other classes (components) may
+	 * store their configuration files here.
+	 * 
+	 * @return The directory which is used as the configuration directory for the application.
+	 * 
+	 * @since 1.1.0
+	 */
+	public File getConfigurationDirectory() {
+		if (configFile == null) {
+			readConfig();
+		}
+		return configFile.getParentFile();
 	}
 
 	/**

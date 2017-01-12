@@ -26,7 +26,6 @@ import java.sql.Statement;
 import javax.sql.DataSource;
 import javax.sql.rowset.CachedRowSet;
 
-import org.aludratest.cloud.impl.ImplConstants;
 import org.apache.commons.dbcp2.ConnectionFactory;
 import org.apache.commons.dbcp2.DataSourceConnectionFactory;
 import org.apache.commons.dbcp2.PoolableConnection;
@@ -54,15 +53,18 @@ public class LogDatabase {
 
 	private DataSource dataSource;
 
-	LogDatabase() throws Exception {
-		File derbyDir = new File(new File(System.getProperty("user.home")), ImplConstants.CONFIG_DIR_NAME + "/derby");
+	LogDatabase(File configDir, Integer port) throws Exception {
+		File derbyDir = new File(configDir, "derby");
+		derbyDir.mkdirs();
 		System.setProperty("derby.system.home", derbyDir.getAbsolutePath());
 
 		Class.forName(DRIVER).newInstance();
 
-		// also start a network server on this DB
-		server = new NetworkServerControl(InetAddress.getByName("0.0.0.0"), 1527);
-		server.start(null);
+		// also start a network server on this DB, if requested
+		if (port != null) {
+			server = new NetworkServerControl(InetAddress.getByName("0.0.0.0"), port);
+			server.start(null);
+		}
 	}
 
 	public boolean isDatabaseExisting() {
@@ -89,7 +91,9 @@ public class LogDatabase {
 		catch (Exception e) {
 		}
 		try {
-			server.shutdown();
+			if (server != null) {
+				server.shutdown();
+			}
 		}
 		catch (Exception e) {
 		}
