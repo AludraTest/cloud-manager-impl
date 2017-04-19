@@ -412,15 +412,21 @@ public class DefaultResourceManagerImpl implements ResourceManager, ResourceColl
 					nextEvent = events.remove(0);
 				}
 
-				if (nextEvent instanceof WaitingResourceRequest) {
-					checkResourceForRequest((WaitingResourceRequest) nextEvent);
-				}
-				else if (nextEvent instanceof Resource) {
-					Resource res = (Resource) nextEvent;
-					if (res.getState() == ResourceState.READY && isInIdle(res) && !checkRequestForResource(res)) {
-						// add to idles
-						putIntoIdle(res);
+				// never die due to exception
+				try {
+					if (nextEvent instanceof WaitingResourceRequest) {
+						checkResourceForRequest((WaitingResourceRequest) nextEvent);
 					}
+					else if (nextEvent instanceof Resource) {
+						Resource res = (Resource) nextEvent;
+						if (res.getState() == ResourceState.READY && isInIdle(res) && !checkRequestForResource(res)) {
+							// add to idles
+							putIntoIdle(res);
+						}
+					}
+				}
+				catch (Throwable t) {
+					LOGGER.error("Unhandled exception in queue worker", t);
 				}
 			}
 		}
@@ -752,11 +758,14 @@ public class DefaultResourceManagerImpl implements ResourceManager, ResourceColl
 
 		private Map<User, Integer> userJobCount;
 
+		private DateTime now;
+
 		public WaitingRequestComparator(ResourceTypeAuthorizationConfig authConfig, Map<User, Integer> userJobCount,
 				int totalResourceCount) {
 			this.authConfig = authConfig;
 			this.userJobCount = userJobCount;
 			this.totalResourceCount = totalResourceCount;
+			this.now = DateTime.now();
 		}
 
 		private static final int NORMALIZE_DIFF = 20;
@@ -773,8 +782,6 @@ public class DefaultResourceManagerImpl implements ResourceManager, ResourceColl
 		}
 
 		private int calculateRequestScore(WaitingResourceRequest request, ResourceTypeAuthorization auth) {
-			DateTime now = DateTime.now();
-
 			int normalizedNiceLevel = auth.getNiceLevel() - NORMALIZE_DIFF;
 			double userMax = Math.min(auth.getMaxResources(), totalResourceCount);
 			if (userMax == 0) {
