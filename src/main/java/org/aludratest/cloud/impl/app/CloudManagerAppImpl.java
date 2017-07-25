@@ -151,6 +151,8 @@ public final class CloudManagerAppImpl extends CloudManagerApp {
 
 			@Override
 			public void preferencesAboutToChange(Preferences oldPreferences, Preferences newPreferences) throws ConfigException {
+				// perform validation by using constructor
+				new CloudManagerAppConfigImpl(newPreferences);
 			}
 		});
 		configure(preferencesRoot);
