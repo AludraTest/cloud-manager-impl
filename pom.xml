@@ -23,12 +23,6 @@
 			<version>${cloud.manager.api.version}</version>
 		</dependency>
 
-		<dependency>
-			<groupId>org.apache.myfaces.core</groupId>
-			<artifactId>myfaces-api</artifactId>
-			<version>2.2.6</version>
-		</dependency>
-
 		<!-- version specified in parent -->
 		<dependency>
 			<groupId>commons-io</groupId>
