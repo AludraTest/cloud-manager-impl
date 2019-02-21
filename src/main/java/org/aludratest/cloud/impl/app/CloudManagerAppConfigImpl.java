@@ -15,147 +15,80 @@
  */
 package org.aludratest.cloud.impl.app;
 
-import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
-
 import org.aludratest.cloud.app.CloudManagerAppConfig;
+import org.aludratest.cloud.app.CloudManagerAppConfigAdmin;
+import org.aludratest.cloud.app.CloudManagerAppSettings;
 import org.aludratest.cloud.config.ConfigException;
+import org.aludratest.cloud.config.ConfigManager;
+import org.aludratest.cloud.config.MainPreferences;
 import org.aludratest.cloud.config.MutablePreferences;
 import org.aludratest.cloud.config.Preferences;
+import org.aludratest.cloud.config.SimplePreferences;
+import org.aludratest.cloud.config.admin.ConfigurationAdmin;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 /**
- * Default implementation of the CloudManagerAppConfig interface. Additional to the default configuration values defined by the
- * interface, the user authentication source and a path to a Phantom JS executable are also read from the stored Preferences.
- * 
+ * Default implementation of the CloudManagerAppConfig interface. Is initially
+ * configured from {@link CloudManagerAppImpl}.
+ *
  * @author falbrech
- * 
+ *
  */
+@Component
 public class CloudManagerAppConfigImpl implements CloudManagerAppConfig {
 
-	private static final String CONFIG_HOST_NAME = "hostName";
+	private ConfigManager configManager;
 
-	private static final String CONFIG_USE_PROXY = "useProxy";
+	private CloudManagerAppSettings settings;
 
-	private static final String CONFIG_PROXY_HOST = "proxyHost";
+	private MainPreferences preferences;
 
-	private static final String CONFIG_PROXY_PORT = "proxyPort";
+	@Autowired
+	public CloudManagerAppConfigImpl(ConfigManager configManager) {
+		this.configManager = configManager;
 
-	private static final String CONFIG_PROXY_BYPASS_REGEXP = "bypassProxyRegexp";
-
-	// "non-public" properties
-	private static final String CONFIG_USER_AUTH = "userAuthentication";
-
-	private static final String CONFIG_PHANTOMJS_EXE = "phantomJSExecutable";
-
-	private String hostName;
-
-	private String userAuthenticationSource;
-
-	private String phantomJsExecutable;
-
-	private boolean useProxy;
-
-	private String proxyHost;
-
-	private int proxyPort;
-
-	private String bypassProxyRegexp;
-
-	/**
-	 * Creates a new instance of this class which reads its configuration values from the given Preferences object.
-	 * 
-	 * @param prefs
-	 *            Preferences object to read configuration values from.
-	 * 
-	 * @throws ConfigException
-	 *             If the configuration stored in the Preferences object is invalid.
-	 */
-	public CloudManagerAppConfigImpl(Preferences prefs) throws ConfigException {
-		hostName = prefs.getStringValue(CONFIG_HOST_NAME);
-		useProxy = prefs.getBooleanValue(CONFIG_USE_PROXY);
-		proxyHost = prefs.getStringValue(CONFIG_PROXY_HOST);
-
-		String s = prefs.getStringValue(CONFIG_PROXY_PORT);
-		if (s != null) {
-			try {
-				proxyPort = Integer.parseInt(s);
-			}
-			catch (NumberFormatException e) {
-				throw new ConfigException("Proxy port is invalid", CONFIG_PROXY_PORT);
-			}
-
-			if (proxyPort < 1 || proxyPort > 65535) {
-				throw new ConfigException("Proxy port is invalid", CONFIG_PROXY_PORT);
-			}
+		SimplePreferences defaultPrefs = new SimplePreferences(null);
+		CloudManagerAppSettingsImpl.fillDefaults(defaultPrefs);
+		try {
+			settings = new CloudManagerAppSettingsImpl(defaultPrefs);
+		} catch (ConfigException e) {
+			throw new RuntimeException("Default app settings are invalid", e);
 		}
+	}
 
-		bypassProxyRegexp = prefs.getStringValue(CONFIG_PROXY_BYPASS_REGEXP);
-		if (bypassProxyRegexp != null) {
-			try {
-				Pattern.compile(bypassProxyRegexp);
-			}
-			catch (PatternSyntaxException e) {
-				throw new ConfigException("Regular expression for proxy bypass hosts is invalid: " + e.getMessage(),
-						CONFIG_PROXY_BYPASS_REGEXP);
-			}
+	@Override
+	public CloudManagerAppSettings getCurrentSettings() {
+		return settings;
+	}
+
+	@Override
+	public void fillDefaults(MutablePreferences preferences) {
+		CloudManagerAppSettingsImpl.fillDefaults(preferences);
+	}
+
+	@Override
+	public void validateConfiguration(Preferences preferences) throws ConfigException {
+		new CloudManagerAppSettingsImpl(preferences);
+	}
+
+	@Override
+	public void setPreferences(MainPreferences preferences) throws ConfigException {
+		this.preferences = preferences;
+		settings = new CloudManagerAppSettingsImpl(preferences);
+	}
+
+	@Override
+	public <T extends ConfigurationAdmin> T getAdminInterface(Class<T> ifaceClass) {
+		if (ifaceClass == CloudManagerAppConfigAdmin.class) {
+			return ifaceClass
+					.cast(new CloudManagerAppSettingsImpl.Admin(preferences, configManager, this));
 		}
-
-		userAuthenticationSource = prefs.getStringValue(CONFIG_USER_AUTH);
-		phantomJsExecutable = prefs.getStringValue(CONFIG_PHANTOMJS_EXE);
+		return null;
 	}
 
-	/**
-	 * Fills the given Preferences object with the default configuration values provided by this implementation.
-	 * 
-	 * @param preferences
-	 *            Preferences object to fill with default configuration values.
-	 */
-	public static void fillDefaults(MutablePreferences preferences) {
-		preferences.setValue(CONFIG_HOST_NAME, "localhost");
-		preferences.setValue(CONFIG_USER_AUTH, "local-file");
+	// called by SettingsImpl Admin
+	void refreshSettings() throws ConfigException {
+		settings = new CloudManagerAppSettingsImpl(preferences);
 	}
-
-	@Override
-	public String getHostName() {
-		return hostName;
-	}
-
-	@Override
-	public boolean isUseProxy() {
-		return useProxy;
-	}
-
-	@Override
-	public String getProxyHost() {
-		return proxyHost;
-	}
-
-	@Override
-	public int getProxyPort() {
-		return proxyPort;
-	}
-
-	@Override
-	public String getBypassProxyRegexp() {
-		return bypassProxyRegexp;
-	}
-
-	/**
-	 * Returns the name of the user authentication source, as it has been read from the Preferences object.
-	 * 
-	 * @return The name of the user authentication source, as it has been read from the Preferences object.
-	 */
-	public String getUserAuthenticationSource() {
-		return userAuthenticationSource;
-	}
-
-	/**
-	 * Returns the full path to a Phantom JS executable, as it has been read from the Preferences object.
-	 * 
-	 * @return The full path to a Phantom JS executable, as it has been read from the Preferences object.
-	 */
-	public String getPhantomJsExecutable() {
-		return phantomJsExecutable;
-	}
-
 }

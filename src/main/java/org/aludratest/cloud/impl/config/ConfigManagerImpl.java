@@ -19,7 +19,7 @@ import org.aludratest.cloud.config.ConfigException;
 import org.aludratest.cloud.config.ConfigManager;
 import org.aludratest.cloud.config.MainPreferences;
 import org.aludratest.cloud.config.Preferences;
-import org.codehaus.plexus.component.annotations.Component;
+import org.springframework.stereotype.Component;
 
 /**
  * Default implementation of the <code>ConfigManager</code> interface. Uses the internal implementation of the
@@ -28,7 +28,7 @@ import org.codehaus.plexus.component.annotations.Component;
  * @author falbrech
  * 
  */
-@Component(role = ConfigManager.class)
+@Component
 public class ConfigManagerImpl implements ConfigManager {
 
 	@Override

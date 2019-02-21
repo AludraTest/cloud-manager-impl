@@ -27,11 +27,11 @@ import org.aludratest.cloud.resource.user.ResourceTypeAuthorizationStore;
 import org.aludratest.cloud.user.StoreException;
 import org.aludratest.cloud.user.admin.UserDatabaseRegistry;
 import org.apache.commons.io.IOUtils;
-import org.codehaus.plexus.component.annotations.Component;
-import org.codehaus.plexus.component.annotations.Configuration;
-import org.codehaus.plexus.component.annotations.Requirement;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Component;
 
 /**
  * Implementation of an Authorization Store which is based on a JSON file. By default, this file is located in the user's home
@@ -40,14 +40,14 @@ import org.json.JSONObject;
  * @author falbrech
  * 
  */
-@Component(role = ResourceTypeAuthorizationStore.class)
+@Component
+@Qualifier("local")
 public class LocalResourceTypeAuthorizationStore implements ResourceTypeAuthorizationStore {
 	
-	@Requirement
+	@Autowired
 	private UserDatabaseRegistry userDatabaseRegistry;
 
-	@Configuration(value = "~/" + ImplConstants.CONFIG_DIR_NAME + "/resourceAuth.json")
-	private String storeFile;
+	private String storeFile = "~/" + ImplConstants.CONFIG_DIR_NAME + "/resourceAuth.json";
 
 	@Override
 	public ResourceTypeAuthorizationConfig loadResourceTypeAuthorizations(ResourceType resourceType)

@@ -64,6 +64,11 @@ public final class LocalUserImpl implements User, Comparable<User>, Serializable
 	}
 
 	@Override
+	public boolean isAdmin() {
+		return "true".equals(getUserAttribute(LocalUserDatabaseImpl.ADMIN_ATTRIBUTE));
+	}
+
+	@Override
 	public int compareTo(User o) {
 		return getName().compareToIgnoreCase(o.getName());
 	}

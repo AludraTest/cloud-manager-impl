@@ -15,35 +15,49 @@
  */
 package org.aludratest.cloud.impl.user;
 
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 import org.aludratest.cloud.user.UserDatabase;
 import org.aludratest.cloud.user.admin.UserDatabaseRegistry;
-import org.codehaus.plexus.component.annotations.Component;
-import org.codehaus.plexus.component.annotations.Requirement;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 /**
  * Default implementation of the <code>UserDatabaseRegistry</code> interface.
- * 
+ *
  * @author falbrech
- * 
+ *
  */
-@Component(role = UserDatabaseRegistry.class)
+@Component
 public final class UserDatabaseRegistryImpl implements UserDatabaseRegistry {
 
-	@Requirement(role = UserDatabase.class)
-	private Map<String, UserDatabase> userDatabases;
+	private List<UserDatabase> userDatabases;
+
+	private volatile UserDatabase selectedDatabase;
+
+	@Autowired
+	public UserDatabaseRegistryImpl(List<UserDatabase> userDatabases) {
+		this.userDatabases = Collections.unmodifiableList(userDatabases);
+	}
 
 	@Override
-	public List<UserDatabase> getAllUserDatabases() {
-		return new ArrayList<UserDatabase>(userDatabases.values());
+	public List<? extends UserDatabase> getAllUserDatabases() {
+		return userDatabases;
 	}
 
 	@Override
 	public UserDatabase getUserDatabase(String sourceName) {
-		return userDatabases.get(sourceName);
+		return userDatabases.stream().filter(ud -> ud.getSource().equals(sourceName)).findFirst().orElse(null);
+	}
+
+	@Override
+	public UserDatabase getSelectedUserDatabase() {
+		return selectedDatabase;
+	}
+
+	public void setSelectedUserDatabase(UserDatabase userDatabase) {
+		this.selectedDatabase = userDatabase;
 	}
 
 }

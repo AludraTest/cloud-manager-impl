@@ -22,6 +22,7 @@ import java.util.List;
 import org.aludratest.cloud.resource.user.MutableResourceTypeAuthorizationConfig;
 import org.aludratest.cloud.resource.user.ResourceTypeAuthorization;
 import org.aludratest.cloud.resource.user.ResourceTypeAuthorizationConfig;
+import org.aludratest.cloud.resource.user.SimpleResourceTypeAuthorization;
 import org.aludratest.cloud.user.StoreException;
 import org.aludratest.cloud.user.User;
 import org.aludratest.cloud.user.UserDatabase;
@@ -32,9 +33,9 @@ import org.json.JSONObject;
 
 /**
  * An implementation of the Mutable resource type authorization config interface which is based on JSON data.
- * 
+ *
  * @author falbrech
- * 
+ *
  */
 public class JSONResourceTypeAuthorizationConfig implements MutableResourceTypeAuthorizationConfig {
 
@@ -44,7 +45,7 @@ public class JSONResourceTypeAuthorizationConfig implements MutableResourceTypeA
 
 	/**
 	 * Constructs a new authorization configuration object based on JSON data.
-	 * 
+	 *
 	 * @param jsonArray
 	 *            JSON array of JSON objects, each objects must have keys <code>userSource</code> and <code>userName</code>, and
 	 *            can optionally have keys <code>maxResources</code> and <code>niceLevel</code>.
@@ -79,7 +80,7 @@ public class JSONResourceTypeAuthorizationConfig implements MutableResourceTypeA
 	/**
 	 * Converts a given authorization configuration object to a JSON array, which then could e.g. be passed to the constructor of
 	 * this class.
-	 * 
+	 *
 	 * @param config
 	 *            Authorization configuration object from which to construct a JSON array.
 	 * @return JSON array describing the authorization configuration object.
@@ -87,7 +88,7 @@ public class JSONResourceTypeAuthorizationConfig implements MutableResourceTypeA
 	 *             If the JSON object could not be created.
 	 */
 	public static JSONArray toJSONArray(ResourceTypeAuthorizationConfig config) throws JSONException {
-		List<JSONObject> values = new ArrayList<JSONObject>();
+		JSONArray result = new JSONArray();
 
 		for (User user : config.getConfiguredUsers()) {
 			ResourceTypeAuthorization auth = config.getResourceTypeAuthorizationForUser(user);
@@ -98,15 +99,15 @@ public class JSONResourceTypeAuthorizationConfig implements MutableResourceTypeA
 			obj.put("maxResources", auth.getMaxResources());
 			obj.put("niceLevel", auth.getNiceLevel());
 
-			values.add(obj);
+			result.put(obj);
 		}
 
-		return new JSONArray(values);
+		return result;
 	}
 
 	/**
 	 * Returns the internal JSON array containing the authorization configuration.
-	 * 
+	 *
 	 * @return The internal JSON array containing the authorization configuration.
 	 */
 	public JSONArray getJsonArray() {

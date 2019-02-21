@@ -110,4 +110,25 @@ public class ClientRequestImpl implements ResourceRequest {
 				+ ", niceLevel: " + niceLevel + ")";
 	}
 
+	@Override
+	public int hashCode() {
+		return requestId.hashCode();
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (obj == null) {
+			return false;
+		}
+		if (obj == this) {
+			return true;
+		}
+		if (obj.getClass() != getClass()) {
+			return false;
+		}
+
+		// only compare request IDs
+		return requestId.equals(((ClientRequestImpl) obj).requestId);
+	}
+
 }

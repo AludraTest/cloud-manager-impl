@@ -21,13 +21,14 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.aludratest.cloud.app.CloudManagerApp;
+import javax.annotation.PostConstruct;
+
 import org.aludratest.cloud.config.ConfigException;
+import org.aludratest.cloud.config.ConfigManager;
 import org.aludratest.cloud.config.ConfigUtil;
 import org.aludratest.cloud.config.Configurable;
 import org.aludratest.cloud.config.MainPreferences;
@@ -37,9 +38,9 @@ import org.aludratest.cloud.config.PreferencesListener;
 import org.aludratest.cloud.config.SimplePreferences;
 import org.aludratest.cloud.config.admin.AbstractConfigurationAdmin;
 import org.aludratest.cloud.config.admin.ConfigurationAdmin;
+import org.aludratest.cloud.impl.util.SpringBeanUtil;
 import org.aludratest.cloud.module.ResourceModule;
-import org.aludratest.cloud.resource.Resource;
-import org.aludratest.cloud.resource.ResourceStateHolder;
+import org.aludratest.cloud.module.ResourceModuleRegistry;
 import org.aludratest.cloud.resource.ResourceType;
 import org.aludratest.cloud.resourcegroup.ResourceGroup;
 import org.aludratest.cloud.resourcegroup.ResourceGroupManager;
@@ -47,20 +48,22 @@ import org.aludratest.cloud.resourcegroup.ResourceGroupManagerAdmin;
 import org.aludratest.cloud.resourcegroup.ResourceGroupManagerListener;
 import org.aludratest.cloud.resourcegroup.ResourceGroupNature;
 import org.aludratest.cloud.resourcegroup.ResourceGroupNatureAssociation;
-import org.codehaus.plexus.component.annotations.Component;
-import org.codehaus.plexus.component.annotations.Requirement;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
+import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 /**
  * Default implementation of the <code>ResourceGroupManager</code> interface.
- * 
+ *
  * @author falbrech
- * 
+ *
  */
-@Component(role = ResourceGroupManager.class, hint = "default")
-public class ResourceGroupManagerImpl implements ResourceGroupManager, Configurable, ResourceGroupManagerImplMBean {
+@Component
+public class ResourceGroupManagerImpl implements ResourceGroupManager, Configurable {
 
 	private static final String METADATA_PREFS_NODE = "groupMetadata";
 
@@ -80,19 +83,31 @@ public class ResourceGroupManagerImpl implements ResourceGroupManager, Configura
 
 	private List<ResourceGroupManagerListener> listeners = new ArrayList<ResourceGroupManagerListener>();
 
-	private ArrayList<ResourceModule> availableModules;
-	
-	@Requirement(role = ResourceGroupNature.class)
+	private ApplicationContext applicationContext;
+
+	private ConfigManager configManager;
+
+	private ResourceModuleRegistry resourceModuleRegistry;
+
+	// populated by PostConstruct
 	private Map<String, ResourceGroupNature> availableNatures;
 
 	private MainPreferences preferences;
 
+	@Autowired
+	public ResourceGroupManagerImpl(ApplicationContext applicationContext, ConfigManager configManager,
+			ResourceModuleRegistry resourceModuleRegistry) {
+		this.applicationContext = applicationContext;
+		this.configManager = configManager;
+		this.resourceModuleRegistry = resourceModuleRegistry;
+	}
+
 	/**
-	 * Constructs a new Resource Group Manager instance.
+	 * Fills required bean maps. Called by Spring Framework. DO NOT CALL!
 	 */
-	public ResourceGroupManagerImpl() {
-		// query application for available modules - they won't change at runtime
-		this.availableModules = new ArrayList<ResourceModule>(CloudManagerApp.getInstance().getAllResourceModules());
+	@PostConstruct
+	public void loadDependencyBeans() {
+		availableNatures = SpringBeanUtil.getBeansOfTypeByQualifier(ResourceGroupNature.class, applicationContext);
 	}
 
 	@Override
@@ -129,7 +144,7 @@ public class ResourceGroupManagerImpl implements ResourceGroupManager, Configura
 	private void configure(MainPreferences preferences) throws ConfigException {
 		// build metadata map out of Preferences
 		Map<Integer, ResourceGroupMetadata> newMeta = readMetadata(preferences);
-		
+
 		// build set of REMOVED, ADDED, and UNCHANGED groups
 		Set<Integer> removedIds;
 		Set<Integer> addedIds;
@@ -255,19 +270,6 @@ public class ResourceGroupManagerImpl implements ResourceGroupManager, Configura
 		return assocMap.get(nature);
 	}
 
-	private ResourceModule getResourceModule(String resourceTypeName) {
-		ResourceModule module = null;
-		synchronized (this) {
-			for (ResourceModule m : availableModules) {
-				if (resourceTypeName.equals(m.getResourceType().getName())) {
-					module = m;
-					break;
-				}
-			}
-		}
-		return module;
-	}
-
 	private ResourceGroupNature getNature(String natureName) {
 		return availableNatures == null ? null : availableNatures.get(natureName);
 	}
@@ -291,7 +293,7 @@ public class ResourceGroupManagerImpl implements ResourceGroupManager, Configura
 
 	private void internalAdd(Integer groupId, ResourceGroupMetadata metadata, MainPreferences groupConfig) throws ConfigException {
 		// find resource module
-		ResourceModule module = getResourceModule(metadata.getResourceType().getName());
+		ResourceModule module = resourceModuleRegistry.getResourceModule(metadata.getResourceType().getName());
 		if (module == null) {
 			return;
 		}
@@ -317,14 +319,14 @@ public class ResourceGroupManagerImpl implements ResourceGroupManager, Configura
 			return;
 		}
 		ResourceGroupNatureAssociation assoc = nature.createAssociationFor(group);
-		
+
 		if (assoc instanceof Configurable) {
 			MainPreferences naturePrefs = groupConfig.getOrCreateChildNode("natures");
 			if (naturePrefs.getChildNode(natureName) == null) {
 				MutablePreferences defPrefs = new SimplePreferences(null);
 				((Configurable) assoc).fillDefaults(defPrefs);
 				MainPreferences prefs = naturePrefs.getOrCreateChildNode(natureName);
-				CloudManagerApp.getInstance().getConfigManager().applyConfig(defPrefs, prefs);
+				configManager.applyConfig(defPrefs, prefs);
 			}
 			// must now be non-null
 			MainPreferences prefs = naturePrefs.getChildNode(natureName);
@@ -358,7 +360,7 @@ public class ResourceGroupManagerImpl implements ResourceGroupManager, Configura
 				ConfigUtil.copyPreferences(naturePrefs, changePrefs);
 				changePrefs.removeChildNode(natureName);
 				try {
-					CloudManagerApp.getInstance().getConfigManager().applyConfig(changePrefs, naturePrefs);
+					configManager.applyConfig(changePrefs, naturePrefs);
 				}
 				catch (ConfigException e) {
 					// should never occur - only log
@@ -408,7 +410,7 @@ public class ResourceGroupManagerImpl implements ResourceGroupManager, Configura
 					continue;
 				}
 
-				ResourceModule module = getResourceModule(typeName);
+				ResourceModule module = resourceModuleRegistry.getResourceModule(typeName);
 				if (module == null) {
 					throw new ConfigException("Unsupported resource type: " + typeName);
 				}
@@ -423,26 +425,6 @@ public class ResourceGroupManagerImpl implements ResourceGroupManager, Configura
 						id,
 						new ResourceGroupMetadata(prefs.getStringValue(METADATA_NAME_PREF_KEY), prefs
 								.getIntValue(METADATA_RANK_PREF_KEY), module.getResourceType(), natures));
-			}
-		}
-
-		return result;
-	}
-
-	/* MBean methods */
-	@Override
-	public List<Resource> getResourcesOfGroup(int groupId) {
-		ResourceGroup group = getResourceGroup(groupId);
-		if (group == null) {
-			return null;
-		}
-
-		List<Resource> result = new ArrayList<Resource>();
-		Iterator<? extends ResourceStateHolder> iter = group.getResourceCollection().iterator();
-		while (iter.hasNext()) {
-			ResourceStateHolder rsh = iter.next();
-			if (rsh instanceof Resource) {
-				result.add((Resource) rsh);
 			}
 		}
 
@@ -466,7 +448,7 @@ public class ResourceGroupManagerImpl implements ResourceGroupManager, Configura
 	private class GroupManagerAdminImpl extends AbstractConfigurationAdmin implements ResourceGroupManagerAdmin {
 
 		protected GroupManagerAdminImpl() {
-			super(preferences);
+			super(preferences, configManager);
 		}
 
 		@Override
@@ -491,7 +473,7 @@ public class ResourceGroupManagerImpl implements ResourceGroupManager, Configura
 		@Override
 		public int createResourceGroup(ResourceType resourceType, String name) throws ConfigException {
 			assertNotCommitted();
-			ResourceModule module = getResourceModule(resourceType.getName());
+			ResourceModule module = resourceModuleRegistry.getResourceModule(resourceType.getName());
 			if (module == null) {
 				throw new IllegalArgumentException("Unsupported resource type: " + resourceType);
 			}
@@ -638,6 +620,9 @@ public class ResourceGroupManagerImpl implements ResourceGroupManager, Configura
 		}
 
 		private void setGroupName(MutablePreferences metaPrefs, String groupNode, String newName) throws ConfigException {
+			if (newName == null || StringUtils.trimWhitespace(newName).isEmpty()) {
+				throw new ConfigException("Empty group name");
+			}
 			// check for an already existing group with same name
 			for (String nodeName : metaPrefs.getChildNodeNames()) {
 				if (!nodeName.equals(groupNode)) {

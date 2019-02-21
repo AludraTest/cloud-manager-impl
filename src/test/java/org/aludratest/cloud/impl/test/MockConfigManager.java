@@ -13,16 +13,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.aludratest.cloud.impl.resourcegroup;
+package org.aludratest.cloud.impl.test;
 
-import java.util.List;
+import org.aludratest.cloud.config.ConfigException;
+import org.aludratest.cloud.config.ConfigManager;
+import org.aludratest.cloud.config.MainPreferences;
+import org.aludratest.cloud.config.Preferences;
+import org.springframework.stereotype.Component;
 
-import org.aludratest.cloud.resource.Resource;
-import org.aludratest.cloud.resourcegroup.ResourceGroupManager;
+@Component
+public class MockConfigManager implements ConfigManager {
 
-@SuppressWarnings("javadoc")
-public interface ResourceGroupManagerImplMBean extends ResourceGroupManager {
+	@Override
+	public void applyConfig(Preferences newConfig, MainPreferences mainConfig) throws ConfigException, IllegalArgumentException {
+		// TODO Auto-generated method stub
 
-	public List<Resource> getResourcesOfGroup(int groupId);
+	}
 
 }

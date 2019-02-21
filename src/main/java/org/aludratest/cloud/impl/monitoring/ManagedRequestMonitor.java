@@ -13,29 +13,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.aludratest.cloud.impl.rest;
+package org.aludratest.cloud.impl.monitoring;
 
-import java.util.Map;
-
-import org.aludratest.cloud.rest.RestConnector;
+import java.util.List;
+import java.util.Optional;
 
 /**
- * Internal helper interface for getting the registered Plexus components for the RestConnector role.
- * 
+ * @deprecated Can most likely be removed - would be useful only in
+ *             cloud-manager-web, which has no dependency to impl.
+ *
  * @author falbrech
- * 
+ *
  */
-public interface RestConnectorRegistry {
+@Deprecated
+public interface ManagedRequestMonitor {
 
-	/**
-	 * Plexus role for this component.
-	 */
-	public static final String ROLE = RestConnectorRegistry.class.getName();
+	public List<ManagedRequestLog> getRequestLog();
 
-	/**
-	 * Returns all RestConnector components registered in Plexus.
-	 * 
-	 * @return All RestConnector components registered in Plexus.
-	 */
-	public Map<String, RestConnector> getRestConnectors();
+	public Optional<Integer> getRequestScore();
+
 }

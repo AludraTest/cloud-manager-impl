@@ -15,19 +15,19 @@
  */
 package org.aludratest.cloud.impl.app;
 
-import java.lang.management.ManagementFactory;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.Map;
-
-import javax.management.JMException;
-import javax.management.MBeanServer;
-import javax.management.ObjectName;
+import java.util.Properties;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 import org.aludratest.cloud.app.CloudManagerApp;
-import org.aludratest.cloud.app.CloudManagerAppConfig;
+import org.aludratest.cloud.app.CloudManagerAppFileStore;
 import org.aludratest.cloud.config.ConfigException;
 import org.aludratest.cloud.config.ConfigManager;
 import org.aludratest.cloud.config.ConfigUtil;
@@ -37,82 +37,84 @@ import org.aludratest.cloud.config.MutablePreferences;
 import org.aludratest.cloud.config.Preferences;
 import org.aludratest.cloud.config.PreferencesListener;
 import org.aludratest.cloud.config.SimplePreferences;
+import org.aludratest.cloud.impl.config.MainPreferencesImpl;
+import org.aludratest.cloud.impl.user.UserDatabaseRegistryImpl;
+import org.aludratest.cloud.impl.util.SpringBeanUtil;
 import org.aludratest.cloud.manager.ResourceManager;
 import org.aludratest.cloud.module.ResourceModule;
+import org.aludratest.cloud.module.ResourceModuleRegistry;
 import org.aludratest.cloud.plugin.CloudManagerPlugin;
-import org.aludratest.cloud.resource.ResourceType;
-import org.aludratest.cloud.resource.user.ResourceTypeAuthorizationStore;
-import org.aludratest.cloud.resource.writer.ResourceWriterFactory;
 import org.aludratest.cloud.resourcegroup.ResourceGroupManager;
 import org.aludratest.cloud.user.UserDatabase;
 import org.aludratest.cloud.user.admin.UserDatabaseRegistry;
-import org.codehaus.plexus.component.annotations.Component;
-import org.codehaus.plexus.component.annotations.Requirement;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
+import org.springframework.stereotype.Component;
 
 /**
- * Default implementation of the CloudManagerApp interface. This implementation is registered as a Plexus component.
- * 
+ * Default implementation of the CloudManagerApp interface.
+ *
  * @author falbrech
- * 
+ *
  */
-@Component(role = CloudManagerApp.class)
-public final class CloudManagerAppImpl extends CloudManagerApp {
+@Component
+public final class CloudManagerAppImpl extends CloudManagerApp implements PreferencesListener {
 
-	private static final Logger LOGGER = LoggerFactory.getLogger(CloudManagerAppImpl.class);
+	private static final Log LOG = LogFactory.getLog(CloudManagerAppImpl.class);
 
-	@Requirement(role = ResourceModule.class)
-	private Map<String, ResourceModule> resourceModules = new HashMap<String, ResourceModule>();
+	private static final String CONFIG_FILENAME = "acm.config";
 
-	@Requirement
+	@Autowired
+	private ApplicationContext applicationContext;
+
+	@Autowired
 	private UserDatabaseRegistry userDatabaseRegistry;
 
-	@Requirement
-	private ResourceTypeAuthorizationStore authorizationStore;
+	@Autowired
+	private ResourceModuleRegistry resourceModuleRegistry;
 
-	@Requirement
+	@Autowired
 	private ResourceManager resourceManager;
 
-	@Requirement
+	@Autowired
 	private ResourceGroupManager resourceGroupManager;
 
-	@Requirement
+	@Autowired
 	private ConfigManager configManager;
 
-	@Requirement(role = CloudManagerPlugin.class)
+	@Autowired
+	private CloudManagerAppFileStore fileStore;
+
+	@Autowired
+	private CloudManagerAppConfigImpl configurable;
+
+	// populated by PostConstruct
+	// FIXME must be replaced with PluginRegistry, analogous to
+	// ResourceModuleRegistry, to avoid dependency cycles
 	private Map<String, CloudManagerPlugin> pluginRegistry;
-
-	private UserDatabase selectedUserDatabase;
-
-	private List<ResourceModule> readOnlyResourceModules;
 
 	private MainPreferences preferencesRoot;
 
-	private CloudManagerAppConfigImpl configuration;
+	private ScheduledExecutorService saveScheduler;
 
-	/**
-	 * Creates a new instance of this implementation class.
-	 */
-	public CloudManagerAppImpl() {
-		CloudManagerApp.instance = this;
-	}
+	private ScheduledFuture<?> scheduledSave;
 
 	@Override
-	public void start(MainPreferences configuration) throws ConfigException {
-		preferencesRoot = configuration;
+	public void start() throws ConfigException {
+		pluginRegistry = SpringBeanUtil.getBeansOfTypeByQualifier(CloudManagerPlugin.class, applicationContext);
+
+		createMainPreferences();
+		saveScheduler = Executors.newScheduledThreadPool(1);
 
 		SimplePreferences mutableRoot = new SimplePreferences(null);
 		ConfigUtil.copyPreferences(preferencesRoot, mutableRoot);
 
-		// set defaults for all configurable modules, when no config is set
-		if (mutableRoot.getChildNode("basic") == null) {
-			MutablePreferences basicRoot = mutableRoot.createChildNode("basic");
-			CloudManagerAppConfigImpl.fillDefaults(basicRoot);
-		}
+		fillDefaults(mutableRoot);
 
 		MutablePreferences modulesRoot = mutableRoot.createChildNode("modules");
-		for (ResourceModule module : getAllResourceModules()) {
+		for (ResourceModule module : resourceModuleRegistry.getAllResourceModules()) {
 			if (module instanceof Configurable) {
 				String nodeName = module.getResourceType().getName();
 				if (modulesRoot.getChildNode(nodeName) == null) {
@@ -141,62 +143,35 @@ public final class CloudManagerAppImpl extends CloudManagerApp {
 		}
 
 		if (ConfigUtil.differs(mutableRoot, preferencesRoot)) {
-			getConfigManager().applyConfig(mutableRoot, preferencesRoot);
+			configManager.applyConfig(mutableRoot, preferencesRoot);
 		}
-		preferencesRoot.getChildNode("basic").addPreferencesListener(new PreferencesListener() {
-			@Override
-			public void preferencesChanged(Preferences oldPreferences, MainPreferences newPreferences) throws ConfigException {
-				CloudManagerAppImpl.this.configuration = new CloudManagerAppConfigImpl(newPreferences);
-			}
-
-			@Override
-			public void preferencesAboutToChange(Preferences oldPreferences, Preferences newPreferences) throws ConfigException {
-				// perform validation by using constructor
-				new CloudManagerAppConfigImpl(newPreferences);
-			}
-		});
 		configure(preferencesRoot);
 		resourceManager.start(resourceGroupManager);
 
 		for (CloudManagerPlugin plugin : pluginRegistry.values()) {
 			plugin.applicationStarted();
 		}
-
-		// register our MBeans
-		MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
-		try {
-			ObjectName name = new ObjectName("org.aludratest.cloud:type=ResourceGroupManager");
-			mbs.registerMBean(resourceGroupManager, name);
-			name = new ObjectName("org.aludratest.cloud:type=ResourceManager");
-			mbs.registerMBean(resourceManager, name);
-			// name = new ObjectName("org.aludratest.cloud:type=ConfigManager");
-			// mbs.registerMBean(configManager, name);
-		}
-		catch (JMException e) {
-			LOGGER.warn("Could not register beans in JMX", e);
-		}
 	}
 
 	@Override
 	public void shutdown() {
-		MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
-		try {
-			mbs.unregisterMBean(new ObjectName("org.aludratest.cloud:type=ResourceGroupManager"));
-			mbs.unregisterMBean(new ObjectName("org.aludratest.cloud:type=ResourceManager"));
-			// mbs.unregisterMBean(new ObjectName("org.aludratest.cloud:type=ConfigManager"));
+		if (resourceManager != null) {
+			resourceManager.shutdown();
 		}
-		catch (JMException e) {
-			LOGGER.warn("Could not register beans in JMX", e);
+		if (saveScheduler != null) {
+			saveScheduler.shutdown();
 		}
 
-		resourceManager.shutdown();
-
-		for (ResourceModule module : resourceModules.values()) {
-			module.handleApplicationShutdown();
+		if (resourceModuleRegistry != null) {
+			for (ResourceModule module : resourceModuleRegistry.getAllResourceModules()) {
+				module.handleApplicationShutdown();
+			}
 		}
 
-		for (CloudManagerPlugin plugin : pluginRegistry.values()) {
-			plugin.applicationStopped();
+		if (pluginRegistry != null) {
+			for (CloudManagerPlugin plugin : pluginRegistry.values()) {
+				plugin.applicationStopped();
+			}
 		}
 
 		preferencesRoot = null;
@@ -207,21 +182,141 @@ public final class CloudManagerAppImpl extends CloudManagerApp {
 		return preferencesRoot != null;
 	}
 
+	private void createMainPreferences() throws ConfigException {
+		preferencesRoot = new MainPreferencesImpl(null);
+		((MainPreferencesImpl) preferencesRoot).applyPreferences(readConfig());
+		attachPreferencesListener(preferencesRoot);
+	}
+
+	private void attachPreferencesListener(MainPreferences preferences) {
+		preferences.addPreferencesListener(this);
+		for (String nodeName : preferences.getChildNodeNames()) {
+			attachPreferencesListener(preferences.getChildNode(nodeName));
+		}
+	}
+
+	private MutablePreferences readConfig() {
+		if (!fileStore.existsFile(CONFIG_FILENAME)) {
+			return new SimplePreferences(null);
+		}
+
+		try (InputStream in = fileStore.openFile(CONFIG_FILENAME)) {
+			return readPreferences(in);
+		} catch (IOException e) {
+			LOG.error("Could not read preferences file " + CONFIG_FILENAME);
+			return new SimplePreferences(null);
+		}
+	}
+
+	private MutablePreferences readPreferences(InputStream in) throws IOException {
+		Properties p = new Properties();
+		SimplePreferences prefs = new SimplePreferences(null);
+
+		p.loadFromXML(in);
+
+		for (String key : p.stringPropertyNames()) {
+			String value = p.getProperty(key);
+			if ("".equals(value)) {
+				value = null;
+			}
+			prefs.setValue(key, value);
+		}
+
+		return prefs;
+	}
+
+	private byte[] serializePreferences(Preferences prefs) {
+		// compress to properties
+		Properties p = new Properties();
+		copyToProperties(prefs, null, p);
+
+		ByteArrayOutputStream baos = new ByteArrayOutputStream();
+		try {
+			p.storeToXML(baos, "AludraTest Cloud Manager auto-generated config file. DO NOT MODIFY!!");
+		} catch (IOException e) {
+			LOG.error("Could not serialize preferences", e);
+			return new byte[0];
+		}
+
+		return baos.toByteArray();
+	}
+
+	private static void copyToProperties(Preferences prefs, String prefix, Properties p) {
+		for (String key : prefs.getKeyNames()) {
+			if (key == null) {
+				throw new NullPointerException("key");
+			}
+			// if value == null, use empty string
+			String value = prefs.getStringValue(key);
+			if (value == null) {
+				value = "";
+			}
+			p.setProperty(prefix == null ? key : (prefix + "/" + key), value);
+		}
+
+		for (String node : prefs.getChildNodeNames()) {
+			copyToProperties(prefs.getChildNode(node), prefix == null ? node : (prefix + "/" + node), p);
+		}
+	}
+
+	private void saveAllPreferences() {
+		if (preferencesRoot == null) {
+			throw new IllegalStateException("Config cannot be saved before loaded");
+		}
+
+		LOG.debug("Saving ACM preferences");
+		try {
+			fileStore.saveFile(CONFIG_FILENAME, new ByteArrayInputStream(serializePreferences(preferencesRoot)));
+		} catch (IOException e) {
+			LOG.error("Could not write preferences file", e);
+		}
+	}
+
+	@Override
+	public void preferencesAboutToChange(Preferences oldPreferences, Preferences newPreferences)
+			throws ConfigException {
+	}
+
+	@Override
+	public void preferencesChanged(Preferences oldPreferences, MainPreferences newPreferences) throws ConfigException {
+		// attach us as listener to all child nodes (if we are already registered, this
+		// is a no-op)
+		attachPreferencesListener(newPreferences);
+
+		synchronized (this) {
+			if (scheduledSave != null) {
+				scheduledSave.cancel(false);
+			}
+		}
+
+		scheduledSave = saveScheduler.schedule(new Runnable() {
+			@Override
+			public void run() {
+				synchronized (CloudManagerAppImpl.this) {
+					scheduledSave = null;
+				}
+				saveAllPreferences();
+			}
+		}, 100, TimeUnit.MILLISECONDS);
+	}
+
 	private void configure(MainPreferences preferences) throws ConfigException {
 		MainPreferences basic = preferences.getOrCreateChildNode("basic");
-		configuration = new CloudManagerAppConfigImpl(basic);
+		configurable.setPreferences(basic);
 
-		selectedUserDatabase = userDatabaseRegistry.getUserDatabase(configuration.getUserAuthenticationSource());
-		if (selectedUserDatabase == null) {
-			selectedUserDatabase = userDatabaseRegistry.getAllUserDatabases().get(0);
-			LOGGER.warn("Could not find user database of type " + configuration.getUserAuthenticationSource()
-					+ ". Using first found user database "
-					+ selectedUserDatabase + ".");
+		UserDatabase userDb = userDatabaseRegistry
+				.getUserDatabase(configurable.getCurrentSettings().getUserAuthenticationSource());
+		if (userDb == null) {
+			userDb = userDatabaseRegistry.getAllUserDatabases().get(0);
+			LOG.warn("Could not find user database of type "
+					+ configurable.getCurrentSettings().getUserAuthenticationSource()
+					+ ". Using first found user database " + userDb + ".");
 		}
+		((UserDatabaseRegistryImpl) userDatabaseRegistry).setSelectedUserDatabase(userDb);
 
 		// update all configurable modules
 		MainPreferences modulesRoot = preferences.getOrCreateChildNode("modules");
-		for (ResourceModule module : getAllResourceModules()) {
+		for (ResourceModule module : resourceModuleRegistry.getAllResourceModules()) {
 			if (module instanceof Configurable) {
 				MainPreferences prefs = modulesRoot.getChildNode(module.getResourceType().getName());
 				if (prefs != null) {
@@ -249,53 +344,8 @@ public final class CloudManagerAppImpl extends CloudManagerApp {
 		}
 	}
 
-	@Override
-	public ResourceWriterFactory getResourceWriterFactory(ResourceType resourceType) {
-		ResourceModule module = getResourceModule(resourceType);
-		return module == null ? null : module.getResourceWriterFactory();
-	}
-
-	@Override
-	public UserDatabaseRegistry getUserDatabaseRegistry() {
-		return userDatabaseRegistry;
-	}
-
-	@Override
-	public UserDatabase getSelectedUserDatabase() {
-		return selectedUserDatabase;
-	}
-
-	@Override
-	public ResourceTypeAuthorizationStore getResourceTypeAuthorizationStore() {
-		return authorizationStore;
-	}
-
-	@Override
-	public ResourceGroupManager getResourceGroupManager() {
-		return resourceGroupManager;
-	}
-
-	@Override
-	public ResourceManager getResourceManager() {
-		return resourceManager;
-	}
-
-	@Override
-	public ConfigManager getConfigManager() {
-		return configManager;
-	}
-
-	@Override
-	public CloudManagerAppConfig getBasicConfiguration() {
-		return configuration;
-	}
-
-	@Override
-	public List<ResourceModule> getAllResourceModules() {
-		if (readOnlyResourceModules == null) {
-			readOnlyResourceModules = Collections.unmodifiableList(new ArrayList<ResourceModule>(resourceModules.values()));
-		}
-		return readOnlyResourceModules;
+	private void fillDefaults(MutablePreferences preferences) {
+		CloudManagerAppSettingsImpl.fillDefaults(preferences.createChildNode("basic"));
 	}
 
 }

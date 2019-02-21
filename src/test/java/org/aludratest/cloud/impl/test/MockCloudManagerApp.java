@@ -13,16 +13,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.aludratest.cloud.impl.manager;
+package org.aludratest.cloud.impl.test;
 
+import org.aludratest.cloud.app.CloudManagerApp;
+import org.aludratest.cloud.config.ConfigException;
+import org.springframework.stereotype.Component;
 
-@SuppressWarnings("javadoc")
-public interface DefaultResourceManagerImplMBean {
+@Component
+public class MockCloudManagerApp extends CloudManagerApp {
 
-	public int getTotalQueueSize();
+	@Override
+	public void start() throws ConfigException {
+		// TODO Auto-generated method stub
+	}
 
-	public int getIdleResourceCount();
+	@Override
+	public boolean isStarted() {
+		// TODO Auto-generated method stub
+		return false;
+	}
 
-	public int getRunningQueriesCount();
+	@Override
+	public void shutdown() {
+		// TODO Auto-generated method stub
+
+	}
 
 }

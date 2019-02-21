@@ -13,12 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.aludratest.cloud.impl.request;
+package org.aludratest.cloud.impl.manager;
 
-public interface ClientRequestHandlerMBean {
+import java.util.Optional;
 
-	public int getGateKeeperThreadCount();
+public interface RequestScoreHolder {
 
-	public int getProcessingRequestCount();
+	public Optional<Integer> getRequestScore();
+
+	public void setRequestScore(int requestScore);
 
 }

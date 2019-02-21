@@ -13,37 +13,47 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.aludratest.cloud.impl.manager;
+package org.aludratest.cloud.impl;
 
-import org.aludratest.cloud.resource.Resource;
+import java.util.HashMap;
+import java.util.Map;
 
-@SuppressWarnings("javadoc")
-public class ResourceInfo implements ResourceInfoMBean {
+import org.aludratest.cloud.user.User;
 
-	private Resource resource;
+public class MockUser implements User {
 
-	public ResourceInfo() {
-	}
+	private String name;
 
-	public static ResourceInfo create(Resource res) {
-		ResourceInfo info = new ResourceInfo();
-		info.resource = res;
-		return info;
-	}
+	private Map<String, String> attributes = new HashMap<>();
 
-	@Override
-	public String getResourceState() {
-		return resource.getState().toString();
+	public MockUser(String name) {
+		super();
+		this.name = name;
 	}
 
 	@Override
-	public String getResourceType() {
-		return resource.getResourceType().getName();
+	public String getName() {
+		return name;
 	}
 
 	@Override
-	public String getStringRepresentation() {
-		return resource.toString();
+	public String[] getDefinedUserAttributes() {
+		return attributes.keySet().toArray(new String[0]);
+	}
+
+	@Override
+	public String getUserAttribute(String attributeKey) {
+		return attributes.get(attributeKey);
+	}
+
+	@Override
+	public String getSource() {
+		return "test";
+	}
+
+	@Override
+	public boolean isAdmin() {
+		return false;
 	}
 
 }
